@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Holy Books</title>
+<meta name="description" content="One topic across every installed scripture, side by side: how much each says, a summary of what it says with its references, the chapters nearest in meaning, and the verses themselves — with any chapter readable beside its parallels.">
+<link rel="stylesheet" href="/api/v1/apps-runtime/v1/theme.css">
+<script src="/api/v1/apps-runtime/v1/embabel.js"></script>
+<script type="application/embabel-app+json">
+{"version":1,"name":"holy-books","requires":{"lenses":[],"views":["Scriptures","WordAcrossScriptures","SearchScriptures","SummarizeAcrossScriptures","SummarizeMeaningAcrossScriptures","MeaningAcrossScriptures","AskScriptures","ReadScriptureChapter"],"realms":["realm-scripture-vocabulary"],"namespaces":[]}}
+</script>
+<style>
+  /* No one scripture's look: a neutral reading room, with each scripture told apart by an accent of its
+     own rather than by a style borrowed from one tradition. */
+  :root{--bg:#f4f1ea;--page:#fbf9f4;--raised:#efeadf;--rule:#d9d1c1;--ink:#24211c;--faded:#6f685b;--accent:#3d5a80;
+        --hl:rgba(61,90,128,0.12);--serif:'Iowan Old Style','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;
+        --sans:system-ui,-apple-system,'Segoe UI',sans-serif;
+        --embabel-bg:var(--bg);--embabel-surface:var(--page);--embabel-border:var(--rule);--embabel-text:var(--ink);}
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){--bg:#1b1a17;--page:#24221e;--raised:#2d2a25;--rule:#3f3a32;--ink:#ece6da;--faded:#a59d8e;
+      --accent:#8fb3dc;--hl:rgba(143,179,220,0.14);}
+  }
+  :root[data-theme="dark"]{--bg:#1b1a17;--page:#24221e;--raised:#2d2a25;--rule:#3f3a32;--ink:#ece6da;--faded:#a59d8e;
+    --accent:#8fb3dc;--hl:rgba(143,179,220,0.14);}
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--serif);}
+  body{padding:0 16px 64px;}
+  button{font:inherit;cursor:pointer;}
+  header{max-width:1240px;margin:0 auto;padding:36px 0 10px;text-align:center;}
+  .kicker{font-family:var(--sans);text-transform:uppercase;letter-spacing:0.22em;color:var(--faded);font-size:0.75rem;}
+  h1{margin:6px 0 4px;font-weight:normal;font-size:2.4rem;letter-spacing:0.02em;}
+  .lede{color:var(--faded);margin:0 auto 20px;max-width:760px;line-height:1.6;font-size:1.02rem;}
+  form{display:flex;gap:10px;flex-wrap:wrap;max-width:860px;margin:0 auto;}
+  .field{flex:1 1 360px;min-width:0;display:flex;flex-direction:column;text-align:left;gap:4px;}
+  .field.small{flex:0 1 200px;}
+  label{font-family:var(--sans);font-size:0.75rem;color:var(--faded);letter-spacing:0.04em;}
+  input{background:var(--page);color:var(--ink);border:1px solid var(--rule);border-radius:6px;padding:12px 14px;
+    font:inherit;font-size:1.05rem;outline:none;min-width:0;width:100%;}
+  input:focus{border-color:var(--accent);}
+  .go{align-self:flex-end;background:var(--accent);color:var(--page);border:0;border-radius:6px;padding:12px 24px;font-family:var(--sans);font-size:0.95rem;}
+  .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:14px auto 0;max-width:980px;}
+  .chip{background:transparent;border:1px solid var(--rule);color:var(--faded);border-radius:999px;padding:4px 12px;font-size:0.9rem;}
+  .chip:hover{color:var(--accent);border-color:var(--accent);}
+  .modes{display:inline-flex;border:1px solid var(--rule);border-radius:999px;overflow:hidden;margin:14px auto 0;font-family:var(--sans);font-size:0.85rem;}
+  .modes button{background:transparent;border:0;color:var(--faded);padding:6px 14px;}
+  .modes button[aria-pressed="true"]{background:var(--accent);color:var(--page);}
+  embabel-operation-state{display:block;max-width:860px;margin:12px auto 0;text-align:left;}
+  .note{color:var(--faded);font-size:0.88rem;line-height:1.5;font-style:italic;}
+  .overview{max-width:1240px;margin:18px auto 0;}
+  .bars{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;}
+  .bar{background:var(--page);border:1px solid var(--rule);border-radius:8px;padding:10px 12px;font-family:var(--sans);font-size:0.82rem;}
+  .bar .n{font-family:var(--serif);font-size:1.4rem;}
+  .bar .track{height:6px;background:var(--raised);border-radius:3px;margin-top:6px;overflow:hidden;}
+  .bar .fill{height:100%;border-radius:3px;}
+  .grid{max-width:1240px;margin:16px auto 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:16px;align-items:start;}
+  .col{background:var(--page);border:1px solid var(--rule);border-top:4px solid var(--c,var(--accent));border-radius:8px;padding:14px 16px 16px;min-width:0;}
+  .col h2{margin:0;font-weight:normal;font-size:1.35rem;}
+  .col .meta{font-family:var(--sans);font-size:0.75rem;color:var(--faded);margin-top:2px;}
+  .col h3{font-family:var(--sans);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.14em;color:var(--c,var(--accent));margin:16px 0 6px;font-weight:600;}
+  .summary{line-height:1.55;font-size:0.98rem;}
+  .summary ul{margin:0;padding-left:18px;}
+  .summary li{margin-bottom:6px;}
+  .silent{color:var(--faded);font-style:italic;line-height:1.5;}
+  .waiting{color:var(--faded);font-style:italic;font-size:0.9rem;}
+  .waiting::after{content:'';display:inline-block;width:1.2em;text-align:left;animation:dots 1.4s steps(4) infinite;}
+  @keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+  .link{background:transparent;border:0;padding:0;color:var(--c,var(--accent));text-decoration:underline;text-decoration-color:var(--rule);text-underline-offset:3px;}
+  .link:hover{text-decoration-color:currentColor;}
+  .ch{display:block;width:100%;text-align:left;background:transparent;border:0;border-bottom:1px dotted var(--rule);padding:7px 0;color:var(--ink);}
+  .ch:hover .nm{color:var(--c,var(--accent));}
+  .ch .nm{font-size:1rem;}
+  .ch .snip{display:block;color:var(--faded);font-size:0.86rem;line-height:1.4;margin-top:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+  .vs{display:block;width:100%;text-align:left;background:transparent;border:0;padding:6px 0;color:var(--ink);line-height:1.5;font-size:0.94rem;}
+  .vs .ref{font-family:var(--sans);font-size:0.75rem;color:var(--c,var(--accent));margin-right:6px;}
+  mark{background:var(--hl);color:inherit;border-radius:2px;}
+  .orig{display:block;color:var(--faded);font-size:1rem;margin-top:2px;}
+  .problem{border:1px solid #c9a39a;background:#f6e3dc;color:#7f2419;border-radius:6px;padding:10px 12px;font-size:0.9rem;font-family:var(--sans);}
+  .placeholder{max-width:760px;margin:40px auto;color:var(--faded);text-align:center;line-height:1.6;font-style:italic;}
+  /* The reader: a panel over the page, so the columns stay where the reader left them. */
+  dialog{border:1px solid var(--rule);border-radius:10px;background:var(--page);color:var(--ink);padding:0;width:min(820px,100% - 24px);max-height:calc(100vh - 40px);}
+  dialog::backdrop{background:rgba(20,18,15,0.45);}
+  .rhead{position:sticky;top:0;background:var(--page);border-bottom:1px solid var(--rule);padding:14px 20px;display:flex;align-items:baseline;gap:12px;}
+  .rhead h2{margin:0;font-weight:normal;font-size:1.5rem;flex:1;min-width:0;}
+  .rhead .meta{font-family:var(--sans);font-size:0.78rem;color:var(--faded);}
+  .close{background:transparent;border:1px solid var(--rule);border-radius:6px;padding:4px 10px;color:var(--faded);font-family:var(--sans);}
+  .rbody{padding:12px 24px 24px;overflow:auto;}
+  .rbody p{margin:0 0 6px;line-height:1.7;font-size:1.06rem;padding:2px 6px;border-radius:4px;}
+  .rbody p.hit{background:var(--hl);}
+  .rbody .vn{font-family:var(--sans);color:var(--c,var(--accent));font-size:0.68em;vertical-align:super;margin-right:4px;font-weight:600;}
+  .rbody .par{font-family:var(--sans);font-size:0.75rem;margin-left:6px;}
+  .ask{max-width:1240px;margin:30px auto 0;border-top:1px solid var(--rule);padding-top:18px;}
+  .ask h2{font-weight:normal;font-size:1.3rem;margin:0 0 4px;text-align:center;}
+  .answers{margin-top:14px;display:grid;gap:10px;}
+  .answer{background:var(--page);border:1px solid var(--rule);border-left:4px solid var(--c,var(--accent));border-radius:6px;padding:10px 14px;}
+  .answer .top{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;}
+  .answer .top .meta{font-family:var(--sans);font-size:0.75rem;color:var(--faded);}
+  .answer .why{color:var(--faded);font-size:0.9rem;line-height:1.45;margin-top:4px;}
+  footer{max-width:1240px;margin:30px auto 0;color:var(--faded);font-size:0.82rem;text-align:center;font-family:var(--sans);}
+  footer a{color:var(--faded);}
+  #how-it-works{max-width:1240px;margin:24px auto 0;background:var(--page);border:1px solid var(--rule);border-radius:8px;
+    padding:22px 26px;line-height:1.6;display:none;}
+  #how-it-works:target{display:block;}
+  #how-it-works h2{margin-top:0;font-weight:normal;}
+  #how-it-works h3{font-family:var(--sans);font-size:0.78rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--accent);margin:20px 0 6px;}
+  #how-it-works pre{background:var(--raised);border:1px solid var(--rule);border-radius:6px;padding:10px 12px;overflow:auto;
+    font-size:0.78rem;font-family:ui-monospace,Menlo,monospace;color:var(--ink);}
+  #how-it-works code{font-family:ui-monospace,Menlo,monospace;font-size:0.88em;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">Every scripture installed</div>
+  <h1>Holy Books</h1>
+  <p class="lede">Name a topic and read what each scripture says about it, side by side. Each one gets its own summary,
+    with the verses it rests on, its nearest chapters by meaning and the verses that use the word. Any chapter opens to
+    read, alongside the same passage in another scripture where one exists.</p>
+  <form id="search">
+    <div class="field">
+      <label for="topic">Topic</label>
+      <input id="topic" autocomplete="off" placeholder="e.g. fasting, the stranger, the flood, forgiveness">
+    </div>
+    <div class="field small">
+      <label for="term">Verses containing</label>
+      <input id="term" autocomplete="off" placeholder="word or stem" title="Matched inside words, so a stem catches every form: circumcis finds circumcise, circumcision and uncircumcised.">
+    </div>
+    <button class="go" type="submit">Compare</button>
+  </form>
+  <div class="row" id="examples"></div>
+  <div class="modes" role="group" aria-label="Summarise from">
+    <button id="m-word" aria-pressed="true" title="Summarise the verses that use the word. A scripture that never uses it is shown as silent.">From the verses using the word</button>
+    <button id="m-meaning" aria-pressed="false" title="Summarise each scripture's nearest chapters by meaning, which finds passages that never use the word.">From the nearest chapters by meaning</button>
+  </div>
+  <embabel-operation-state id="state"></embabel-operation-state>
+</header>
+
+<section class="overview" id="overview" aria-label="How much each scripture says"></section>
+<section class="grid" id="grid" aria-label="Each scripture"><div class="placeholder">Choose a topic above, or try one of the examples.</div></section>
+
+<section class="ask" aria-label="Ask a question">
+  <h2>Ask a question instead</h2>
+  <p class="note" style="text-align:center">For a question rather than a topic. A retrieval agent searches every scripture,
+    reads further where a passage is unclear, and keeps only the chapters it judges to bear on the question. It takes
+    longer: half a minute or more.</p>
+  <form id="askform">
+    <div class="field"><label for="question">Question</label>
+      <input id="question" autocomplete="off" placeholder="e.g. What do the scriptures teach about how to treat a stranger?"></div>
+    <button class="go" type="submit">Ask</button>
+  </form>
+  <embabel-operation-state id="askstate"></embabel-operation-state>
+  <div class="answers" id="answers"></div>
+</section>
+
+<dialog id="reader" aria-label="Reader"></dialog>
+
+<footer>Data from the scripture realms installed in this world, through realm-scripture-vocabulary. Summaries are written
+  by a model from the verses shown, and cite them, so check them against the text.
+  · <a href="#how-it-works">How it works</a></footer>
+
+<section id="how-it-works">
+  <h2>How it works</h2>
+
+  <h3>The data</h3>
+  <p>The page reads only realm-scripture-vocabulary's parent types — <code>HolyBook</code>, <code>ScriptureChapter</code>,
+    <code>Verse</code> — so it answers from every scripture realm installed in this world: today the Bible (King James),
+    the Quran (Pickthall, with the Arabic), the Tanakh (JPS 1917, with the Hebrew), the Book of Mormon, the Doctrine and
+    Covenants and the Pearl of Great Price. Their verses are reference data seeded once at install and unchanging. Each
+    chapter is also a document, chunked and embedded when its realm is installed, tagged <code>scripture</code> and its
+    scripture's slug; that is what the meaning search ranks. Counterparts across scriptures (<code>CORRESPONDS_TO</code>) are
+    derived by the scripture realms from pairings their builds checked word by word against the King James.</p>
+
+  <h3>The views, and the Cypher that runs</h3>
+  <h3>Scriptures</h3>
+  <p>the columns — every scripture installed, with its tradition and translation.</p>
+  <pre>MATCH (h:HolyBook)
+RETURN h.scripture AS scripture, h.name AS name, h.tradition AS tradition,
+       h.originalLanguage AS originalLanguage, h.translation AS translation,
+       h.chapterCount AS chapters, h.verseCount AS verses
+ORDER BY scripture</pre>
+  <h3>WordAcrossScriptures</h3>
+  <p>the bars — verses using the word, per thousand verses.</p>
+  <pre>MATCH (v:Verse)
+WITH v.scripture AS scripture, count(v) AS verses,
+     sum(CASE WHEN toLower(v.text) CONTAINS toLower($term) THEN 1 ELSE 0 END) AS matching
+RETURN scripture, matching, verses,
+       round(1000.0 * matching / verses, 2) AS perThousandVerses
+ORDER BY perThousandVerses DESC</pre>
+  <h3>SearchScriptures</h3>
+  <p>“Verses using the word” — the first few in each scripture, with the chapter each opens.</p>
+  <pre>MATCH (v:Verse)
+WHERE toLower(v.text) CONTAINS toLower($term)
+WITH v ORDER BY v.scripture, v.ordinal
+WITH v.scripture AS scripture, count(v) AS matches, collect(v)[0..$perScripture] AS hits
+UNWIND hits AS hit
+MATCH (hit)-[:IN]-&gt;(ch:ScriptureChapter)
+RETURN scripture, matches, hit.name AS reference, hit.text AS text, hit.original AS original, ch.name AS chapter
+ORDER BY scripture, hit.ordinal</pre>
+  <h3>MeaningAcrossScriptures</h3>
+  <p>“Nearest chapters by meaning” — run once per scripture, scoped by its tag.</p>
+  <pre>MATCH (c:Concept {value: $query})-[r:RELEVANT_TO]-&gt;(d:Document)
+WHERE &#x27;scripture&#x27; IN d.tags AND $scripture IN d.tags
+MATCH (ch:ScriptureChapter {documentUri: d.uri})&lt;-[:IN]-(v:Verse)
+WITH r, ch, v ORDER BY v.verse
+WITH r, ch, collect({reference: v.name, text: v.text})[0..$verses] AS opening
+RETURN r.rank AS rank, ch.scripture AS scripture, ch.name AS chapter, r.score AS score, r.snippet AS matched, opening
+ORDER BY rank</pre>
+  <h3>SummarizeAcrossScriptures</h3>
+  <p>“What it says” — one model summary per scripture of the verses using the word.</p>
+  <pre>MATCH (v:Verse)
+WHERE toLower(v.text) CONTAINS toLower($term)
+WITH v ORDER BY v.ordinal
+WITH v.scripture AS scripture, count(v) AS matching, collect(v)[0..$maxVerses] AS verses
+UNWIND verses AS v
+RETURN scripture, matching,
+       summarize(v.name + &#x27;: &#x27; + v.text, &#x27;What these verses of one scripture say about &#x27; + $topic + &#x27; — its teaching, its stories and its figures of speech — in a few short points, each citing the verse references it rests on.&#x27;) AS summary
+ORDER BY matching DESC</pre>
+  <h3>SummarizeMeaningAcrossScriptures</h3>
+  <p>“What it says”, in meaning mode — one call per scripture, two at a time.</p>
+  <pre>MATCH (c:Concept {value: $query})-[r:RELEVANT_TO]-&gt;(d:Document)
+WHERE &#x27;scripture&#x27; IN d.tags AND $scripture IN d.tags
+MATCH (ch:ScriptureChapter {documentUri: d.uri})&lt;-[:IN]-(v:Verse)
+WITH ch, v ORDER BY v.ordinal
+RETURN ch.scripture AS scripture, collect(DISTINCT ch.name) AS chapters,
+       summarize(v.name + &#x27;: &#x27; + v.text, &#x27;What these chapters of one scripture say about &#x27; + $query + &#x27;, in a few short points, each citing the verse references it rests on. If they do not address it, say only that this scripture does not speak of it here.&#x27;) AS summary</pre>
+  <h3>ReadScriptureChapter</h3>
+  <p>the reader — a chapter with its original text and its parallels.</p>
+  <pre>MATCH (ch:ScriptureChapter {name: $chapter})&lt;-[:IN]-(v:Verse)
+OPTIONAL MATCH (v)-[:CORRESPONDS_TO]-(o:Verse)
+WITH ch, v, collect(o.name) AS parallels
+RETURN ch.scripture AS scripture, ch.name AS chapter, v.verse AS verse, v.name AS reference,
+       v.text AS text, v.original AS original, parallels
+ORDER BY verse</pre>
+  <h3>AskScriptures</h3>
+  <p>“Ask a question instead” — the agentic retrieval loop.</p>
+  <pre>MATCH (c:Concept {value: $question})-[r:RELEVANT_TO {via: &#x27;agentic-rag&#x27;, intent: &#x27;find the scripture chapters, in any scripture, that teach, narrate or command what the question asks about&#x27;}]-&gt;(d:Document)
+WHERE &#x27;scripture&#x27; IN d.tags
+MATCH (ch:ScriptureChapter {documentUri: d.uri})
+RETURN r.rank AS rank, ch.scripture AS scripture, ch.name AS chapter, r.score AS fit, r.snippet AS evidence
+ORDER BY rank
+LIMIT $limit</pre>
+
+  <h3>What an empty panel means</h3>
+  <p><b>“No verse uses …”</b> — the scripture's English text has no verse containing the word or stem. It is an answer:
+    the Quran never uses “circumcis”. Try the meaning mode, or another form of the word. <b>“Its nearest chapters do not
+    speak of …”</b> — the model read the closest chapters by meaning and judged they do not address the topic; it says
+    so rather than summarising them as if they did. <b>“No chapter of this scripture is searchable by meaning yet”</b> —
+    its chapter documents are not ingested (yet); the other panels still answer. A red panel is an error from the
+    appliance, shown as it came.</p>
+
+  <h3>What the appliance did that a conventional stack could not</h3>
+  <p>Six scriptures from four realms, written separately, answer one query because each declared its types as children
+    of the same vocabulary — no integration code and no shared schema migration, and a seventh realm appears as a column
+    the moment it is installed. The meaning search is a relationship in the same Cypher as the graph walk
+    (<code>(:Concept)-[:RELEVANT_TO]->(:Document)</code> then back to the chapter's verses), not a separate vector service
+    whose results are joined in application code. The summaries are a Cypher aggregation (<code>summarize</code>) grouped
+    by scripture like <code>count</code> would be. And the parallels are derived edges: a scripture's realm states a rule,
+    and the graph carries the edges for every view without anyone storing them.</p>
+</section>
+
+
+<script>
+/*
+ * One topic across every installed scripture. The page names no scripture: the columns are whatever the
+ * Scriptures view returns, so a scripture realm installed tomorrow appears here with no change.
+ *
+ * Every column fills from several views at once, in increasing cost: the word count (one fast call for
+ * all), the verses using it (one call for all), the nearest chapters by meaning (one fast call per
+ * scripture, so that a scripture that dwells on a theme cannot crowd the others out of a shared top
+ * eight), and the model's summary (one call for all, or one per scripture in meaning mode — the slow
+ * part, so it arrives last and each column shows that it is waiting).
+ */
+(function () {
+  var EXAMPLES = [
+    ['circumcision', 'circumcis'], ['fasting', 'fast'], ['the stranger', 'stranger'], ['forgiveness', 'forgiv'],
+    ['the flood', 'flood'], ['wine', 'wine'], ['angels', 'angel'], ['charity to the poor', 'poor'], ['the afterlife', 'paradise']
+  ];
+  /* An accent per scripture, so a column, its bar and a reader panel are recognisably the same one. A
+     scripture not listed gets one from its slug, so a new realm still gets a colour of its own. */
+  var ACCENTS = { bible: '#8a3b2e', tanakh: '#2f5d8a', quran: '#2e7d5b', 'book-of-mormon': '#7a5a1e',
+    'doctrine-and-covenants': '#6b4a8a', 'pearl-of-great-price': '#8a4a6b' };
+  var PALETTE = ['#5b6f2e', '#2e6f7a', '#7a2e5b', '#4a4a8a', '#8a6a2e'];
+  /* The model's honest miss — the aggregation answers with this, rather than summarising chapters that do not
+     bear on the topic — and the instruction's own "does not speak of it". Either shows the column as silent. */
+  var SILENT = /do not contain this information|does not speak of it|do not address/i;
+
+  var stateEl = document.getElementById('state');
+  var grid = document.getElementById('grid'), overview = document.getElementById('overview');
+  var topicEl = document.getElementById('topic'), termEl = document.getElementById('term');
+  var reader = document.getElementById('reader');
+  var scriptures = [];            // [{scripture, name, tradition, translation, verses}]
+  var mode = 'word';
+  var token = 0;
+  var asked = { topic: '', term: '' };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function rowsOf(r) {
+    if (!r) return [];
+    if (Array.isArray(r.data)) return r.data;
+    if (r.data && Array.isArray(r.data.rows)) return r.data.rows;
+    if (Array.isArray(r.rows)) return r.rows;
+    return [];
+  }
+  function warningsOf(r) {
+    if (!r) return [];
+    if (Array.isArray(r.warnings)) return r.warnings;
+    if (r.data && Array.isArray(r.data.warnings)) return r.data.warnings;
+    return [];
+  }
+  function warnText(w) { return typeof w === 'string' ? w : (w && (w.message || w.code)) || String(w); }
+  function errText(e) { return e && e.message ? e.message : String(e); }
+  function problem(msg) { return '<div class="problem">' + esc(msg) + '</div>'; }
+  function accent(slug) {
+    if (ACCENTS[slug]) return ACCENTS[slug];
+    var h = 0;
+    for (var i = 0; i < slug.length; i++) h = (h * 31 + slug.charCodeAt(i)) >>> 0;
+    return PALETTE[h % PALETTE.length];
+  }
+  function info(slug) {
+    for (var i = 0; i < scriptures.length; i++) if (scriptures[i].scripture === slug) return scriptures[i];
+    return { scripture: slug, name: slug };
+  }
+  function slot(slug, part) { return document.getElementById('c-' + slug + '-' + part); }
+  function fill(slug, part, html) { var el = slot(slug, part); if (el) el.innerHTML = html; }
+
+  /* The word as typed, matched inside words; shown marked in a verse's text. Escaped first, so the mark
+     only ever wraps text that was already safe. */
+  function marked(text, term) {
+    var safe = esc(text);
+    if (!term) return safe;
+    var re = new RegExp('(' + esc(term).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig');
+    return safe.replace(re, '<mark>$1</mark>');
+  }
+  /* A summary arrives as markdown-ish bullet lines. They are painted as text, line by line, never as markup:
+     the model's words are untrusted. */
+  function summaryHtml(text) {
+    var lines = String(text || '').split(/\n+/).map(function (l) { return l.trim(); }).filter(Boolean);
+    var bullets = lines.filter(function (l) { return /^[-*•]\s+/.test(l); });
+    if (bullets.length && bullets.length >= lines.length - 1) {
+      return '<ul>' + lines.map(function (l) { return '<li>' + esc(l.replace(/^[-*•]\s+/, '')) + '</li>'; }).join('') + '</ul>';
+    }
+    return lines.map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('');
+  }
+  /* A stem for the word field when only a topic is typed: the last word, less a common English ending, so that
+     "forgiveness" searches "forgiv" and catches forgive and forgiven. Editable, and shown, because it is a guess. */
+  function stemOf(topic) {
+    var words = String(topic || '').toLowerCase().replace(/[^a-z\s'-]/g, ' ').trim().split(/\s+/)
+      .filter(function (w) { return w && ['the', 'a', 'an', 'of', 'to', 'and', 'in', 'for', 'on'].indexOf(w) < 0; });
+    var w = words.length ? words[words.length - 1] : '';
+    var rules = [/(ification)$/, /(iveness|fulness|ousness)$/, /(ation|ition|ision|ment|ness)$/, /(ings?|ers?|ies|ed|es)$/, /(s)$/];
+    for (var i = 0; i < rules.length; i++) {
+      if (rules[i].test(w) && w.replace(rules[i], '').length >= 4) { w = w.replace(rules[i], ''); break; }
+    }
+    if (/^circumcis/.test(w)) w = 'circumcis';
+    return w;
+  }
+
+  function call(view, params, opts) {
+    return embabel.views.invoke(view, params, opts || {});
+  }
+  /* Model summaries run two at a time: each is several model calls, and a column per scripture started at
+     once spends them all before the reader has read the first. The searches are not queued. */
+  var SUMMARY_SLOTS = 2, running = 0, queued = [];
+  function summaryCall(view, params, opts) {
+    return new Promise(function (resolve, reject) {
+      queued.push(function () {
+        running++;
+        call(view, params, opts).then(resolve, reject).then(function () { running--; next(); });
+      });
+      next();
+    });
+  }
+  function next() { while (running < SUMMARY_SLOTS && queued.length) queued.shift()(); }
+
+  function columnsHtml() {
+    return scriptures.map(function (s) {
+      var slug = esc(s.scripture);
+      return '<article class="col" style="--c:' + accent(s.scripture) + '" aria-label="' + esc(s.name) + '">' +
+        '<h2>' + esc(s.name) + '</h2>' +
+        '<div class="meta">' + esc([s.tradition, s.translation].filter(Boolean).join(' · ')) + '</div>' +
+        '<h3>What it says</h3><div class="summary" id="c-' + slug + '-summary"><span class="waiting">Waiting for the summary</span></div>' +
+        '<h3>Nearest chapters by meaning</h3><div id="c-' + slug + '-chapters"><span class="waiting">Searching</span></div>' +
+        '<h3>Verses using the word</h3><div id="c-' + slug + '-verses"><span class="waiting">Searching</span></div>' +
+        '</article>';
+    }).join('');
+  }
+
+  function renderOverview(rows) {
+    var max = rows.reduce(function (m, r) { return Math.max(m, Number(r.perThousandVerses) || 0); }, 0) || 1;
+    var by = {};
+    rows.forEach(function (r) { by[r.scripture] = r; });
+    overview.innerHTML = '<p class="note" style="text-align:center;margin:0 0 8px">Verses containing “' + esc(asked.term) +
+      '”, per thousand verses, so a long scripture does not win by length.</p><div class="bars">' +
+      scriptures.map(function (s) {
+        var r = by[s.scripture] || { matching: 0, perThousandVerses: 0, verses: s.verses };
+        var pct = Math.round(100 * (Number(r.perThousandVerses) || 0) / max);
+        return '<div class="bar" style="--c:' + accent(s.scripture) + '"><div>' + esc(s.name) + '</div>' +
+          '<div class="n">' + esc(r.perThousandVerses) + '<span class="note" style="font-style:normal"> ‰</span></div>' +
+          '<div>' + esc(r.matching) + ' of ' + esc(r.verses) + ' verses</div>' +
+          '<div class="track"><div class="fill" style="width:' + pct + '%;background:' + accent(s.scripture) + '"></div></div></div>';
+      }).join('') + '</div>';
+  }
+
+  function renderVerses(rows, t) {
+    var by = {};
+    rows.forEach(function (r) { (by[r.scripture] = by[r.scripture] || []).push(r); });
+    scriptures.forEach(function (s) {
+      var hits = by[s.scripture] || [];
+      if (!hits.length) { fill(s.scripture, 'verses', '<div class="silent">No verse uses “' + esc(asked.term) + '”.</div>'); return; }
+      fill(s.scripture, 'verses', hits.map(function (h) {
+        return '<button class="vs" data-chapter="' + esc(h.chapter) + '" data-ref="' + esc(h.reference) + '" data-scripture="' + esc(s.scripture) + '">' +
+          '<span class="ref">' + esc(h.reference) + '</span>' + marked(h.text, asked.term) +
+          (h.original ? '<span class="orig" dir="auto">' + esc(h.original) + '</span>' : '') + '</button>';
+      }).join('') + (hits[0].matches > hits.length ? '<div class="note">and ' + esc(hits[0].matches - hits.length) + ' more.</div>' : ''));
+    });
+  }
+
+  function renderChapters(slug, rows) {
+    if (!rows.length) { fill(slug, 'chapters', '<div class="silent">No chapter of this scripture is searchable by meaning yet.</div>'); return; }
+    fill(slug, 'chapters', rows.slice(0, 4).map(function (r) {
+      return '<button class="ch" data-chapter="' + esc(r.chapter) + '" data-scripture="' + esc(slug) + '">' +
+        '<span class="nm">' + esc(r.chapter) + '</span>' +
+        (r.matched ? '<span class="snip">' + esc(r.matched) + '</span>' : '') + '</button>';
+    }).join(''));
+  }
+
+  function renderSummary(slug, text, from) {
+    if (text == null) {
+      fill(slug, 'summary', '<div class="silent">' + (mode === 'word'
+        ? 'No verse uses “' + esc(asked.term) + '”, so there is nothing in those words to summarise. ' +
+          '<button class="link" data-meaning="' + esc(slug) + '">Look by meaning instead</button>'
+        : 'No summary came back.') + '</div>');
+      return;
+    }
+    if (SILENT.test(text)) {
+      fill(slug, 'summary', '<div class="silent">Its nearest chapters do not speak of ' + esc(asked.topic) + '.</div>');
+      return;
+    }
+    fill(slug, 'summary', summaryHtml(text) + (from ? '<div class="note">' + esc(from) + '</div>' : ''));
+  }
+
+  function summariseByMeaning(slug, t) {
+    fill(slug, 'summary', '<span class="waiting">Waiting to read its nearest chapters</span>');
+    return summaryCall('SummarizeMeaningAcrossScriptures', { query: asked.topic, scripture: slug }, {
+      expectation: 'A model reads this scripture’s nearest chapters — usually 10–30 seconds.'
+    }).then(function (res) {
+      if (t !== token) return;
+      var r = rowsOf(res)[0];
+      renderSummary(slug, r ? r.summary : null, r && r.chapters ? 'From ' + r.chapters.join(', ') + '.' : '');
+    }).catch(function (e) { if (t === token) fill(slug, 'summary', problem(errText(e))); });
+  }
+
+  function compare(topic, term) {
+    var t = ++token;
+    queued = [];
+    asked = { topic: topic, term: term };
+    grid.innerHTML = columnsHtml();
+    overview.innerHTML = '';
+
+    call('WordAcrossScriptures', { term: term }).then(function (res) {
+      if (t === token) renderOverview(rowsOf(res));
+    }).catch(function (e) { if (t === token) overview.innerHTML = problem(errText(e)); });
+
+    call('SearchScriptures', { term: term, perScripture: 4 }).then(function (res) {
+      if (t === token) renderVerses(rowsOf(res), t);
+    }).catch(function (e) { if (t === token) scriptures.forEach(function (s) { fill(s.scripture, 'verses', problem(errText(e))); }); });
+
+    scriptures.forEach(function (s) {
+      call('MeaningAcrossScriptures', { query: topic, scripture: s.scripture, verses: 1 }).then(function (res) {
+        if (t === token) renderChapters(s.scripture, rowsOf(res));
+      }).catch(function (e) { if (t === token) fill(s.scripture, 'chapters', problem(errText(e))); });
+    });
+
+    if (mode === 'meaning') {
+      scriptures.forEach(function (s) { summariseByMeaning(s.scripture, t); });
+      return;
+    }
+    scriptures.forEach(function (s) { fill(s.scripture, 'summary', '<span class="waiting">A model is reading the verses</span>'); });
+    summaryCall('SummarizeAcrossScriptures', { term: term, topic: topic, maxVerses: 150 }, {
+      state: stateEl,
+      expectation: 'A model reads each scripture’s verses and summarises them — usually 15–40 seconds.'
+    }).then(function (res) {
+      if (t !== token) return;
+      var by = {};
+      rowsOf(res).forEach(function (r) { by[r.scripture] = r; });
+      var w = warningsOf(res);
+      scriptures.forEach(function (s) {
+        var r = by[s.scripture];
+        renderSummary(s.scripture, r ? r.summary : null,
+          r ? 'From the ' + (r.matching > 150 ? 'first 150 of ' : '') + r.matching + ' verse' + (r.matching === 1 ? '' : 's') + ' using “' + asked.term + '”.' : '');
+      });
+      if (w.length) grid.insertAdjacentHTML('afterbegin', '<div style="grid-column:1/-1">' + problem('Partial answer: ' + w.map(warnText).join(' · ')) + '</div>');
+    }).catch(function (e) { if (t === token) scriptures.forEach(function (s) { fill(s.scripture, 'summary', problem(errText(e))); }); });
+  }
+
+  /* The reader. A verse's parallels are verse names; the chapter is the name less its verse number for the
+     scriptures that number chapters that way, which are the ones that carry parallels. */
+  function chapterOfRef(ref) { return String(ref || '').replace(/:\d+$/, ''); }
+  /* Only the chapter opened last may fill the reader: a parallel followed quickly can answer before the
+     chapter it was clicked from, and that one must not land over it. */
+  var readerToken = 0;
+  function openChapter(chapter, slug, hitRef) {
+    var t = ++readerToken;
+    reader.style.setProperty('--c', accent(slug || ''));
+    reader.innerHTML = '<div class="rhead"><h2>' + esc(chapter) + '</h2><button class="close" data-close>Close</button></div>' +
+      '<div class="rbody"><p class="waiting">Opening the chapter</p></div>';
+    if (!reader.open) reader.showModal();
+    call('ReadScriptureChapter', { chapter: chapter }).then(function (res) {
+      if (t !== readerToken) return;
+      var rows = rowsOf(res);
+      if (!rows.length) { reader.querySelector('.rbody').innerHTML = '<p class="silent">This chapter could not be found.</p>'; return; }
+      var s = info(rows[0].scripture);
+      reader.style.setProperty('--c', accent(rows[0].scripture));
+      reader.querySelector('.rhead').innerHTML = '<h2>' + esc(rows[0].chapter) + '</h2><span class="meta">' + esc(s.name) +
+        (s.translation ? ' · ' + esc(s.translation) : '') + '</span><button class="close" data-close>Close</button>';
+      reader.querySelector('.rbody').innerHTML = rows.map(function (v) {
+        var par = (v.parallels || []).map(function (p) {
+          return '<button class="link par" data-chapter="' + esc(chapterOfRef(p)) + '" data-ref="' + esc(p) + '" title="The same passage in another scripture">' + esc(p) + '</button>';
+        }).join(' ');
+        return '<p id="v-' + esc(v.verse) + '" class="' + (v.reference === hitRef ? 'hit' : '') + '"><span class="vn">' + esc(v.verse) + '</span>' +
+          marked(v.text, asked.term) + (par ? ' <span class="par">↔ ' + par + '</span>' : '') +
+          (v.original ? '<span class="orig" dir="auto">' + esc(v.original) + '</span>' : '') + '</p>';
+      }).join('');
+      var hit = reader.querySelector('p.hit');
+      if (hit) hit.scrollIntoView({ block: 'center' });
+    }).catch(function (e) { if (t === readerToken) reader.querySelector('.rbody').innerHTML = problem(errText(e)); });
+  }
+
+  document.addEventListener('click', function (ev) {
+    var el = ev.target.closest('[data-close],[data-chapter],[data-meaning],[data-example]');
+    if (!el) return;
+    if (el.hasAttribute('data-close')) { reader.close(); return; }
+    if (el.hasAttribute('data-meaning')) { summariseByMeaning(el.getAttribute('data-meaning'), token); return; }
+    if (el.hasAttribute('data-example')) {
+      var ex = EXAMPLES[Number(el.getAttribute('data-example'))];
+      topicEl.value = ex[0]; termEl.value = ex[1];
+      compare(ex[0], ex[1]);
+      return;
+    }
+    openChapter(el.getAttribute('data-chapter'), el.getAttribute('data-scripture'), el.getAttribute('data-ref'));
+  });
+  reader.addEventListener('click', function (ev) { if (ev.target === reader) reader.close(); });
+
+  document.getElementById('search').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var topic = topicEl.value.trim();
+    if (!topic) return;
+    var term = termEl.value.trim() || stemOf(topic);
+    termEl.value = term;
+    compare(topic, term);
+  });
+  /* A new topic gets a new guessed stem; a stem the reader typed is theirs and is left alone. */
+  var termTyped = false;
+  termEl.addEventListener('input', function () { termTyped = termEl.value.trim() !== ''; });
+  topicEl.addEventListener('input', function () { if (!termTyped) termEl.value = stemOf(topicEl.value); });
+
+  function setMode(m) {
+    mode = m;
+    document.getElementById('m-word').setAttribute('aria-pressed', String(m === 'word'));
+    document.getElementById('m-meaning').setAttribute('aria-pressed', String(m === 'meaning'));
+    if (asked.topic) compare(asked.topic, asked.term);
+  }
+  document.getElementById('m-word').addEventListener('click', function () { setMode('word'); });
+  document.getElementById('m-meaning').addEventListener('click', function () { setMode('meaning'); });
+
+  document.getElementById('examples').innerHTML = EXAMPLES.map(function (e, i) {
+    return '<button class="chip" data-example="' + i + '">' + esc(e[0]) + '</button>';
+  }).join('');
+
+  /* Ask: the agentic retrieval, grouped by nothing — its ranking is the answer, and each row says its scripture. */
+  document.getElementById('askform').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var q = document.getElementById('question').value.trim();
+    if (!q) return;
+    var out = document.getElementById('answers');
+    out.innerHTML = '<p class="waiting">The agent is searching and reading</p>';
+    call('AskScriptures', { question: q, limit: 12 }, {
+      state: document.getElementById('askstate'),
+      expectation: 'Agentic retrieval commonly takes 20–60 seconds and can run longer for ambiguous questions.'
+    }).then(function (res) {
+      var rows = rowsOf(res);
+      if (!rows.length) { out.innerHTML = '<p class="silent">No chapter was judged to bear on that question.</p>'; return; }
+      out.innerHTML = rows.map(function (r) {
+        var s = info(r.scripture);
+        return '<div class="answer" style="--c:' + accent(r.scripture) + '"><div class="top">' +
+          '<button class="link" data-chapter="' + esc(r.chapter) + '" data-scripture="' + esc(r.scripture) + '">' + esc(r.chapter) + '</button>' +
+          '<span class="meta">' + esc(s.name) + (r.fit != null ? ' · fit ' + esc(Number(r.fit).toFixed(2)) : '') + '</span></div>' +
+          (r.evidence ? '<div class="why">' + esc(r.evidence) + '</div>' : '') + '</div>';
+      }).join('');
+    }).catch(function (e) { out.innerHTML = problem(errText(e)); });
+  });
+
+  var ready = (window.embabel && embabel.manifest && embabel.manifest.ready) ? embabel.manifest.ready : Promise.resolve({ ok: true });
+  ready.then(function () { return call('Scriptures', {}); }).then(function (res) {
+    scriptures = rowsOf(res).sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+    if (!scriptures.length) {
+      grid.innerHTML = '<div class="placeholder">No scripture is installed. Install a scripture realm — realm-bible, realm-quran, ' +
+        'realm-tanakh, realm-book-of-mormon — and it appears here.</div>';
+    }
+  }).catch(function (e) { grid.innerHTML = problem(errText(e)); });
+})();
+</script>
+<div id="embabel-badge" style="position:fixed;bottom:0;left:0;right:0;text-align:center;padding:6px 0;background:rgba(10,10,15,0.9);border-top:1px solid rgba(99,192,245,0.2);font-size:0.75rem;color:#6b7280;z-index:9999;pointer-events:none;">
+  Created with <a href="https://worlds.embabel.com" target="_blank" rel="noopener noreferrer" style="color:#63c0f5;text-decoration:none;pointer-events:auto;">Embabel Worlds</a>
+</div>
+</body>
+</html>

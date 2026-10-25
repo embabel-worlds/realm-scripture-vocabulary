@@ -1,0 +1,25 @@
+name: scripture-vocabulary
+description: >-
+  The words every scripture shares, whichever scripture it is. Parent types only — a holy
+  book, a book within it, a chapter, a verse, a portion read on a cycle — with no producers
+  and no data of its own. A realm over one scripture (the Bible, the Quran, the Tanakh, the
+  Book of Mormon) declares its own types as children of these, so a question asked about
+  Verse is answered by every scripture installed, and `MATCH (v:Quran:Verse)` still asks one.
+version: 0.3.0
+# Not ready to be offered: four scriptures are children, but the contract is new, and the
+# meaning-search views depend on every child stamping `documentUri` and tagging its documents.
+maturity: experimental
+url: https://github.com/embabel-worlds/realm-scripture-vocabulary
+author: Rod Johnson
+realmLabel: Scripture
+tags:
+  - vocabulary
+  - scripture
+  - religion
+  - reference
+exports:
+  - HolyBook
+  - ScriptureBook
+  - ScriptureChapter
+  - Verse
+  - ReadingPortion

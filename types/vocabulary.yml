@@ -1,0 +1,155 @@
+# Parent types for scripture. Nothing here fetches or stores anything. A realm over one scripture
+# makes its own types CHILDREN of these:
+#
+#   - name: Ayah                      # in realm-quran
+#     parents: [Verse]
+#
+# and from then on an Ayah IS a Verse — the label is on the node, and the properties below are its
+# properties. A view written against Verse never learns which scripture answered it;
+# `MATCH (v:Quran:Verse)` still asks one, by its realm label.
+#
+# THE SHAPE. Scriptures do not divide alike, so the levels are not a fixed ladder:
+#
+#   HolyBook ◀─IN─ ScriptureBook ◀─IN─ ScriptureChapter ◀─IN─ Verse      the Bible, the Tanakh,
+#                                                                         the Book of Mormon
+#   HolyBook ◀─IN──────────────────── ScriptureChapter ◀─IN─ Verse      the Quran and the Doctrine
+#                                                                         and Covenants: a surah or a
+#                                                                         section is a chapter of one book
+#   ReadingPortion ◀─IN_PORTION─ Verse                                   a parashah, a juz
+#
+# Every structural edge is IN, pointing up, so `(v:Verse)-[:IN*1..3]->(h:HolyBook)` reaches the
+# holy book from any scripture's verse, however many levels it has (on an Embabel host from late
+# October 2026; before that, the shape preflight refuses the variable-length form). A ReadingPortion is not a level:
+# portions are read on a cycle, cut across chapters, and a verse belongs to one as well as to its
+# chapter — so it has its own edge.
+#
+# THE CONTRACT A CHILD SIGNS. Inheriting the names is not enough; a child must also mean the same
+# thing by them, or a view that reads the parent gets confident nonsense:
+#
+#   scripture   on every node, at every level: the holy book's slug, lower case — `bible`,
+#               `quran`, `tanakh`, `book-of-mormon`, `doctrine-and-covenants`,
+#               `pearl-of-great-price`. It is what a cross-scripture answer groups
+#               by, and what it shows a reader beside each verse.
+#   text        ENGLISH, always, in a public-domain rendering the child names in `translation`.
+#               Never the original language. It is the one field every scripture can be searched
+#               in together; a scripture whose original is not English keeps that in `original`.
+#               For the Quran in particular, `text` is a translation of its meaning and `original`
+#               is the Quran — the descriptions on the child say so.
+#   original    the verse in the language the tradition holds to be the scripture itself (Arabic,
+#               Hebrew), verbatim from a named source. Empty where the scripture was received in
+#               English, or where the child stores no original.
+#   name        the reference as a reader writes it, unambiguous across scriptures: `Judges 3:21`,
+#               `Quran 2:255`, `1 Nephi 3:7`. A child whose book names coincide with another
+#               scripture's — a Tanakh beside the Bible — qualifies its references, because a view
+#               that reads both looks verses up by `name` and must not get two.
+#   chapter, verse   integers, in the numbering the child's own tradition uses — which is not
+#               always the Bible's (Hebrew numbering moves Exodus 22:1 to 21:37). Numbers are never
+#               converted to another tradition's to make them line up; that is what
+#               CORRESPONDS_TO, below, is for.
+#   ordinal     the verse's position in its whole scripture, from 1: Genesis 1:1 is 1, Quran 2:1
+#               is 8. Chapter and verse repeat in every book, so this is the only reading order.
+#
+# IDENTITY. Every type here is a RECORD kind, not an identity, so none declares one: each child
+# keys its own nodes in its own notation (OSIS `Gen.1.1`, `2:255`). A Tanakh child's Genesis 1:1 and
+# the Bible's are two nodes, rightly — two translations, sometimes two numberings, two traditions'
+# texts — and must never MERGE.
+#
+# CORRESPONDENCE is an edge, not a shared key: `(a:Verse)-[:CORRESPONDS_TO {kind}]->(b:Verse)` where
+# the two are the same passage in two scriptures — a Tanakh verse and its King James verse
+# (`translation`), a Book of Mormon verse and the Isaiah it quotes (`quotation`) or echoes
+# (`allusion`). It is DERIVED by whichever realm knows both texts, from a pairing it stores and
+# checks, never by renumbering: realm-tanakh, realm-book-of-mormon and realm-lds-scriptures each
+# declare it toward
+# realm-bible, and it is empty until realm-bible is installed.
+#
+# DOCUMENTS. A child that declares its chapters as documents (sources.yml, `lane: documents`) tags
+# them `scripture` and stamps each chapter's `documentUri` with its document's uri. The vocabulary's
+# meaning-search views retrieve by that tag and walk back by that uri, so retrieval-augmented answers
+# span every scripture installed.
+#
+# No `examples:` either, deliberately. The spec's rule is that a steer follows a pinned defect,
+# never a hunch, and nothing has been asked of these types yet.
+
+- name: HolyBook
+  userAnchor: false
+  description: >-
+    A scripture as one tradition receives it — the Bible (in one canon), the Quran, the Tanakh,
+    the Book of Mormon, the Doctrine and Covenants. One node per scripture. Its books, or for the Quran its chapters, are
+    IN it.
+  properties:
+    scripture: "The slug every node of this scripture carries, e.g. `quran`."
+    name: "The scripture's name in English, e.g. `The Quran`, `The Bible (King James Version)`."
+    tradition: "The tradition that holds it as scripture, e.g. `Islam`, `Christianity`, `Judaism`, `Latter-day Saint`."
+    originalLanguage: "The language the tradition holds the scripture to be in, e.g. `Arabic`, `Hebrew`, `English`."
+    translation: "The English rendering `text` carries on its verses, e.g. `Pickthall (1930)`."
+    chapterCount:
+      type: int
+      description: "Chapters in the whole scripture."
+    verseCount:
+      type: int
+      description: "Verses in the whole scripture, in its own numbering."
+
+- name: ScriptureBook
+  userAnchor: false
+  description: >-
+    A book within a scripture that has books — Genesis, 1 Nephi. IN its HolyBook. The Quran has
+    none: its chapters are IN the holy book directly.
+  properties:
+    scripture: "The holy book's slug, e.g. `bible`."
+    name: "The book's name as printed, e.g. `1 Nephi`."
+    bookOrder:
+      type: int
+      description: "Position in the holy book, from 1."
+
+- name: ScriptureChapter
+  userAnchor: false
+  description: >-
+    A chapter: Genesis 1, 1 Nephi 3, or a surah of the Quran. IN its book, or IN the holy book
+    where there are no books. The unit a stretch of text is read and searched at.
+  properties:
+    scripture: "The holy book's slug, e.g. `quran`."
+    name: "The chapter as a reader names it, e.g. `Judges 3`, `Al-Baqara`."
+    chapter:
+      type: int
+      description: "Chapter number in the scripture's own numbering; for the Quran the surah number."
+    verseCount:
+      type: int
+      description: "Verses in the chapter."
+    documentUri: "The uri of this chapter's English document, e.g. `quran://pickthall/2` — where the scripture declares its chapters as documents tagged `scripture`. It is how a document search hit finds its way back to the chapter and its verses."
+
+- name: Verse
+  userAnchor: false
+  description: >-
+    One verse of any scripture, with `text` in English. `scripture` says which. Search across every
+    installed scripture with toLower(v.text) CONTAINS 'mercy'; narrow to one with its realm label,
+    `MATCH (v:Quran:Verse)`, or by `scripture`. IN its chapter.
+  properties:
+    scripture: "The holy book's slug, e.g. `bible`, `quran`."
+    name: "The reference as a reader writes it, unambiguous across scriptures, e.g. `Judges 3:21`, `Quran 2:255`."
+    chapter:
+      type: int
+      description: "Chapter number in the scripture's own numbering."
+    verse:
+      type: int
+      description: "Verse number in the scripture's own numbering."
+    ordinal:
+      type: int
+      description: "Position of the verse in its whole scripture, from 1 — what puts verses in reading order across books, since chapter and verse alone repeat in every book."
+    text: "The verse in ENGLISH, in the rendering the holy book's `translation` names. Always English, so every scripture can be searched together."
+    original: "The verse in the language its tradition holds to be the scripture itself, verbatim. Empty where there is none stored."
+    translation: "Which English rendering `text` is, e.g. `King James Version`, `Pickthall`."
+
+- name: ReadingPortion
+  userAnchor: false
+  description: >-
+    A portion of a scripture read as a unit on a cycle — a juz of the Quran (thirty, one a night in
+    Ramadan), a parashah of the Torah (fifty-four, one a week). It cuts across chapters, so it is not
+    a level: each verse in it points at it with IN_PORTION.
+  properties:
+    scripture: "The holy book's slug, e.g. `quran`."
+    name: "The portion's name, e.g. `Juz 1`, `Bereshit`."
+    number:
+      type: int
+      description: "Position in the cycle, from 1."
+    cycle: "What the cycle is, e.g. `thirty parts, one a night of Ramadan`."
+    startsAt: "The reference of the portion's first verse, e.g. `Quran 2:142`."

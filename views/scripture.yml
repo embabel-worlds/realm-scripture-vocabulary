@@ -1,0 +1,204 @@
+# Views over the parent labels only. They name no scripture, so each answers from every scripture
+# installed, and keeps answering as more are. A realm with no child installed answers nothing — the
+# designed result, not a defect.
+
+- name: Scriptures
+  description: Every scripture installed, with its tradition, its English rendering and how many verses it holds.
+  cypher: |
+    MATCH (h:HolyBook)
+    RETURN h.scripture AS scripture, h.name AS name, h.tradition AS tradition,
+           h.originalLanguage AS originalLanguage, h.translation AS translation,
+           h.chapterCount AS chapters, h.verseCount AS verses
+    ORDER BY scripture
+
+- name: SearchScriptures
+  description: Verses in EVERY installed scripture whose English text contains a word or phrase, case-insensitively — so `mercy` finds it in the Bible and the Quran alike. Matches inside words. Grouped by scripture, then in each scripture's own order.
+  params:
+    term:
+      type: string
+      default: "mercy"
+      description: "The word or phrase to find, in English."
+    perScripture:
+      type: int
+      default: 10
+      description: "How many verses to return from each scripture."
+  cypher: |
+    MATCH (v:Verse)
+    WHERE toLower(v.text) CONTAINS toLower($term)
+    WITH v ORDER BY v.scripture, v.ordinal
+    WITH v.scripture AS scripture, count(v) AS matches, collect(v)[0..$perScripture] AS hits
+    UNWIND hits AS hit
+    MATCH (hit)-[:IN]->(ch:ScriptureChapter)
+    RETURN scripture, matches, hit.name AS reference, hit.text AS text, hit.original AS original, ch.name AS chapter
+    ORDER BY scripture, hit.ordinal
+
+- name: WordAcrossScriptures
+  description: How often a word or phrase appears in each installed scripture's English text — verses containing it, and per thousand verses so a long scripture does not win by length.
+  params:
+    term:
+      type: string
+      default: "mercy"
+      description: "The word or phrase to count, in English."
+  cypher: |
+    MATCH (v:Verse)
+    WITH v.scripture AS scripture, count(v) AS verses,
+         sum(CASE WHEN toLower(v.text) CONTAINS toLower($term) THEN 1 ELSE 0 END) AS matching
+    RETURN scripture, matching, verses,
+           round(1000.0 * matching / verses, 2) AS perThousandVerses
+    ORDER BY perThousandVerses DESC
+
+# MEANING ACROSS SCRIPTURES — the retrieval half of RAG over every scripture installed.
+#
+# Each scripture realm declares its English chapters as documents tagged `scripture` (its
+# sources.yml), and stamps each chapter with the uri of its document (`documentUri`, the vocabulary's
+# contract). So one retrieval, scoped by that one tag inside the search, ranks the Bible's, the
+# Quran's, the Tanakh's and the Book of Mormon's chapters together, and every hit walks back to its
+# chapter and verses without the view knowing which scripture answered. A scripture without the
+# documents source or the stamp simply never appears here.
+#
+# Two views because they answer at two costs. MeaningAcrossScriptures is one fused semantic + lexical
+# pass: deterministic, fast, the ranking a reader can rerun. AskScriptures hands retrieval to the
+# bounded agentic loop, which reformulates and reads further before it judges a chapter fit — several
+# model calls per question, for a question a single pass mis-ranks.
+#
+# The fused pass returns the nearest few chapters (the join's `k`, eight by default) across all
+# scriptures together, so a theme one scripture dwells on can fill them. `scripture` narrows the
+# search to one, inside the retrieval, for a reader who wants that scripture's nearest instead. It is
+# a tag, defaulting to the tag they all share, rather than `'' = all` with an OR: a filter decided by
+# a parameter alone is applied after the nearest eight are chosen, not inside the search, so it would
+# return what of one scripture happened to be in everyone's top eight.
+
+- name: MeaningAcrossScriptures
+  description: The chapters in EVERY installed scripture whose meaning is closest to a question or theme — semantic and lexical retrieval fused into one ranking over the Bible, the Quran, the Tanakh, the Book of Mormon and the rest alike — each with its best-matching passage and its opening verses.
+  params:
+    query:
+      type: string
+      default: "caring for the stranger and the orphan"
+      description: "A theme or question in plain English, e.g. `forgiveness of an enemy`, `the creation of the world`."
+    scripture:
+      type: string
+      default: "scripture"
+      description: "One scripture's slug — `bible`, `quran`, `tanakh`, `book-of-mormon` — to search only it. The default, `scripture`, is the tag every scripture's documents carry, so it searches them all."
+    verses:
+      type: int
+      default: 5
+      description: "How many of each chapter's verses to return with it."
+  cypher: |
+    MATCH (c:Concept {value: $query})-[r:RELEVANT_TO]->(d:Document)
+    WHERE 'scripture' IN d.tags AND $scripture IN d.tags
+    MATCH (ch:ScriptureChapter {documentUri: d.uri})<-[:IN]-(v:Verse)
+    WITH r, ch, v ORDER BY v.verse
+    WITH r, ch, collect({reference: v.name, text: v.text})[0..$verses] AS opening
+    RETURN r.rank AS rank, ch.scripture AS scripture, ch.name AS chapter, r.score AS score, r.snippet AS matched, opening
+    ORDER BY rank
+
+- name: AskScriptures
+  description: What EVERY installed scripture says on a question, by the agentic retrieval loop — it reformulates, searches the Bible's, the Quran's, the Tanakh's and the Book of Mormon's chapters together, reads further where a passage is inconclusive, and returns only chapters it judges bear on the question, with the evidence it read. Slower than MeaningAcrossScriptures; several model calls per question.
+  params:
+    question:
+      type: string
+      default: "What do the scriptures teach about how to treat a stranger?"
+      description: "The question, in plain English."
+    limit:
+      type: int
+      default: 12
+      description: "How many chapters to return."
+  cypher: |
+    MATCH (c:Concept {value: $question})-[r:RELEVANT_TO {via: 'agentic-rag', intent: 'find the scripture chapters, in any scripture, that teach, narrate or command what the question asks about'}]->(d:Document)
+    WHERE 'scripture' IN d.tags
+    MATCH (ch:ScriptureChapter {documentUri: d.uri})
+    RETURN r.rank AS rank, ch.scripture AS scripture, ch.name AS chapter, r.score AS fit, r.snippet AS evidence
+    ORDER BY rank
+    LIMIT $limit
+
+# SUMMARIES — what each scripture says, in a paragraph, by the `summarize` aggregation: the model
+# reads one scripture's verses at a time, because `scripture` is the grouping key beside it, and cites
+# the references it was given. Two ways to choose the verses, as for searching:
+#
+#   SummarizeAcrossScriptures       the verses that use a word. A scripture silent on it has no row,
+#                                   which is itself the answer — nothing is summarised into it.
+#   SummarizeMeaningAcrossScriptures the chapters nearest a theme in one scripture, which finds what is
+#                                   said without the word. The nearest chapters exist whether or not
+#                                   they bear on the theme, so the instruction asks the model to say so
+#                                   when they do not, rather than summarise them as if they did.
+#
+# `maxVerses` bounds what one scripture contributes, in its own order, so a common word costs a
+# bounded number of model calls instead of a fold over thousands of verses.
+
+- name: SummarizeAcrossScriptures
+  description: What each installed scripture says about a topic, summarised by a model from every verse that uses a word, with the references it drew on. A scripture with no such verse is absent — it says nothing in those words. One model summary per scripture; tens of seconds.
+  params:
+    term:
+      type: string
+      default: "circumcis"
+      description: "The word or word-stem the verses must contain, e.g. `circumcis` (circumcise, circumcision, uncircumcised), `fast`, `forgiv`."
+    topic:
+      type: string
+      default: "circumcision"
+      description: "What the summary is about, in plain words."
+    maxVerses:
+      type: int
+      default: 150
+      description: "At most this many verses from each scripture, in its own order."
+  cypher: |
+    MATCH (v:Verse)
+    WHERE toLower(v.text) CONTAINS toLower($term)
+    WITH v ORDER BY v.ordinal
+    WITH v.scripture AS scripture, count(v) AS matching, collect(v)[0..$maxVerses] AS verses
+    UNWIND verses AS v
+    RETURN scripture, matching,
+           summarize(v.name + ': ' + v.text, 'What these verses of one scripture say about ' + $topic + ' — its teaching, its stories and its figures of speech — in a few short points, each citing the verse references it rests on.') AS summary
+    ORDER BY matching DESC
+
+- name: SummarizeMeaningAcrossScriptures
+  description: What one installed scripture says about a theme, summarised by a model from the chapters whose meaning is nearest it — so passages that never use the word are found too. Says so when the nearest chapters do not address the theme. Run once per scripture; tens of seconds.
+  params:
+    query:
+      type: string
+      default: "circumcision as a sign of the covenant"
+      description: "The theme, in plain English."
+    scripture:
+      type: string
+      default: "scripture"
+      description: "One scripture's slug — `bible`, `quran`, `tanakh`, `book-of-mormon` — or `scripture` for the nearest chapters of all of them together."
+  cypher: |
+    MATCH (c:Concept {value: $query})-[r:RELEVANT_TO]->(d:Document)
+    WHERE 'scripture' IN d.tags AND $scripture IN d.tags
+    MATCH (ch:ScriptureChapter {documentUri: d.uri})<-[:IN]-(v:Verse)
+    WITH ch, v ORDER BY v.ordinal
+    RETURN ch.scripture AS scripture, collect(DISTINCT ch.name) AS chapters,
+           summarize(v.name + ': ' + v.text, 'What these chapters of one scripture say about ' + $query + ', in a few short points, each citing the verse references it rests on. If they do not address it, say only that this scripture does not speak of it here.') AS summary
+
+# READING — any chapter of any scripture, by its name, with each verse's counterparts elsewhere.
+
+- name: ReadScriptureChapter
+  description: A whole chapter of any installed scripture, verse by verse, with the original-language text where the scripture carries it and each verse's counterparts in other scriptures through CORRESPONDS_TO.
+  params:
+    chapter:
+      type: string
+      default: "Genesis 17"
+      description: "The chapter's `name` as the other views return it, e.g. `Genesis 17`, `Surah 19` …"
+  cypher: |
+    MATCH (ch:ScriptureChapter {name: $chapter})<-[:IN]-(v:Verse)
+    OPTIONAL MATCH (v)-[:CORRESPONDS_TO]-(o:Verse)
+    WITH ch, v, collect(o.name) AS parallels
+    RETURN ch.scripture AS scripture, ch.name AS chapter, v.verse AS verse, v.name AS reference,
+           v.text AS text, v.original AS original, parallels
+    ORDER BY verse
+
+# CORRESPONDENCE — the same passage in two scriptures. Drawn by whichever realm knows both texts
+# (realm-tanakh: each verse and its King James counterpart; realm-book-of-mormon: each verse that
+# quotes the King James), so this view answers only with realm-bible and one of those installed.
+
+- name: SamePassage
+  description: A verse in any installed scripture and its counterparts in the others, through CORRESPONDS_TO — the Tanakh's Hebrew-numbered verse beside the King James's, a Book of Mormon verse beside the Isaiah it quotes. Either direction.
+  params:
+    reference:
+      type: string
+      default: "Isaiah 2:2"
+      description: "A verse's `name`, e.g. `Isaiah 2:2`, `Tanakh Exodus 21:37`, `2 Nephi 12:2`."
+  cypher: |
+    MATCH (v:Verse {name: $reference})-[r:CORRESPONDS_TO]-(o:Verse)
+    RETURN v.scripture AS scripture, v.name AS reference, v.text AS text,
+           o.scripture AS otherScripture, o.name AS otherReference, o.text AS otherText, r.kind AS kind
+    ORDER BY otherScripture, o.ordinal
