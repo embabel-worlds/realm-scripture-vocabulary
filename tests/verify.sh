@@ -54,7 +54,10 @@ if not holy:
     print("  FAIL no scripture is installed beside the vocabulary: nothing to verify")
     print("FAILED"); sys.exit(1)
 print("== scriptures installed: %s ==" % ", ".join(sorted(holy)))
-paired = kg("MATCH (a:Verse)-[:CORRESPONDS_TO]->(b:Verse) RETURN a.name AS a, b.name AS b LIMIT 1")
+# CORRESPONDS_TO is drawn only by a pairing realm beside realm-bible; with neither, the relationship is
+# not in the schema at all and a query naming it is refused rather than answered empty.
+pairing = post("/api/v1/admin/kg/execute", {"cypher": "MATCH (a:Verse)-[:CORRESPONDS_TO]->(b:Verse) RETURN a.name AS a LIMIT 1"})
+paired = not pairing.get("error") and bool(pairing.get("rows"))
 docs = kg("MATCH (c:ScriptureChapter) WHERE c.documentUri IS NOT NULL RETURN count(c) AS n")[0]["n"] > 0
 
 print("== L1: every view answers by name ==")
