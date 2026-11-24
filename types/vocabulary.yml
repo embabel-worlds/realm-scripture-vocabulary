@@ -67,15 +67,23 @@
 # meaning-search views retrieve by that tag and walk back by that uri, so retrieval-augmented answers
 # span every scripture installed.
 #
-# No `examples:` either, deliberately. The spec's rule is that a steer follows a pinned defect,
-# never a hunch, and nothing has been asked of these types yet.
+# EXAMPLES teach the idioms that hold for every child: search by `text` and group by `scripture`,
+# reach the chapter or the holy book by IN, a reading portion by IN_PORTION, and the same passage
+# elsewhere by CORRESPONDS_TO, written undirected because each realm that draws it chooses its own
+# direction. They name no child label, so they stay true as scriptures are added.
 
 - name: HolyBook
   userAnchor: false
   description: >-
-    A scripture as one tradition receives it — the Bible (in one canon), the Quran, the Tanakh,
-    the Book of Mormon, the Doctrine and Covenants. One node per scripture. Its books, or for the Quran its chapters, are
-    IN it.
+    A scripture as one tradition receives it, identified by its `scripture` slug — the Bible (in one
+    canon), the Quran, the Tanakh, the Book of Mormon, the Doctrine and Covenants. One node per
+    scripture installed. Its books, or for the Quran its surahs, are IN it.
+  examples:
+    - q: "which scriptures are installed and how many verses does each have"
+      cypher: |
+        MATCH (h:HolyBook)
+        RETURN h.name AS scripture, h.tradition AS tradition, h.verseCount AS verses
+        ORDER BY verses DESC
   properties:
     scripture: "The slug every node of this scripture carries, e.g. `quran`."
     name: "The scripture's name in English, e.g. `The Quran`, `The Bible (King James Version)`."
@@ -92,8 +100,9 @@
 - name: ScriptureBook
   userAnchor: false
   description: >-
-    A book within a scripture that has books — Genesis, 1 Nephi. IN its HolyBook. The Quran has
-    none: its chapters are IN the holy book directly.
+    A book within a scripture that has books — Genesis, 1 Nephi — named by `name` within its
+    `scripture`. IN its HolyBook. The Quran and the Doctrine and Covenants have none: their surahs
+    and sections are IN the holy book directly.
   properties:
     scripture: "The holy book's slug, e.g. `bible`."
     name: "The book's name as printed, e.g. `1 Nephi`."
@@ -104,8 +113,9 @@
 - name: ScriptureChapter
   userAnchor: false
   description: >-
-    A chapter: Genesis 1, 1 Nephi 3, or a surah of the Quran. IN its book, or IN the holy book
-    where there are no books. The unit a stretch of text is read and searched at.
+    A chapter, named by `name` as a reader writes it: `Genesis 1`, `1 Nephi 3`, `D&C 76`, or a
+    surah of the Quran by its name, `Al-Baqara`. IN its book, or IN the holy book where there are no
+    books. The unit a stretch of text is read and searched at.
   properties:
     scripture: "The holy book's slug, e.g. `quran`."
     name: "The chapter as a reader names it, e.g. `Judges 3`, `Al-Baqara`."
@@ -115,14 +125,35 @@
     verseCount:
       type: int
       description: "Verses in the chapter."
-    documentUri: "The uri of this chapter's English document, e.g. `quran://pickthall/2` — where the scripture declares its chapters as documents tagged `scripture`. It is how a document search hit finds its way back to the chapter and its verses."
+    documentUri: "The uri of this chapter's English document, e.g. `quran://pickthall/2`; how a document search hit walks back to the chapter. Empty where a scripture declares no documents."
 
 - name: Verse
   userAnchor: false
   description: >-
-    One verse of any scripture, with `text` in English. `scripture` says which. Search across every
-    installed scripture with toLower(v.text) CONTAINS 'mercy'; narrow to one with its realm label,
-    `MATCH (v:Quran:Verse)`, or by `scripture`. IN its chapter.
+    One verse of any scripture, identified by `name` (`Judges 3:21`, `Quran 2:255`), with `text` in
+    English. `scripture` says which. Search across every installed scripture with
+    toLower(v.text) CONTAINS 'mercy'; narrow to one with its realm label, `MATCH (v:Quran:Verse)`, or
+    by `scripture`. IN its chapter.
+  examples:
+    - q: "how many verses mention mercy in each scripture"
+      cypher: |
+        MATCH (v:Verse)
+        WHERE toLower(v.text) CONTAINS 'mercy'
+        RETURN v.scripture AS scripture, count(v) AS verses
+        ORDER BY verses DESC
+    - q: "Quran verses about patience, with their surah"
+      cypher: |
+        MATCH (v:Verse {scripture: 'quran'})-[:IN]->(c:ScriptureChapter)
+        WHERE toLower(v.text) CONTAINS 'patien'
+        RETURN c.name AS surah, v.name AS reference, v.text AS text
+        ORDER BY v.ordinal
+        LIMIT 25
+    - q: "which King James verses does 2 Nephi 12 quote"
+      cypher: |
+        MATCH (v:Verse)-[:IN]->(:ScriptureChapter {name: '2 Nephi 12'})
+        MATCH (v)-[r:CORRESPONDS_TO]-(o:Verse {scripture: 'bible'})
+        RETURN v.name AS verse, o.name AS kingJames, r.kind AS kind
+        ORDER BY v.verse
   properties:
     scripture: "The holy book's slug, e.g. `bible`, `quran`."
     name: "The reference as a reader writes it, unambiguous across scriptures, e.g. `Judges 3:21`, `Quran 2:255`."
@@ -134,17 +165,24 @@
       description: "Verse number in the scripture's own numbering."
     ordinal:
       type: int
-      description: "Position of the verse in its whole scripture, from 1 — what puts verses in reading order across books, since chapter and verse alone repeat in every book."
-    text: "The verse in ENGLISH, in the rendering the holy book's `translation` names. Always English, so every scripture can be searched together."
-    original: "The verse in the language its tradition holds to be the scripture itself, verbatim. Empty where there is none stored."
+      description: "Position of the verse in its whole scripture, from 1 — the reading order across books, since chapter and verse repeat in every book."
+    text: "The verse in ENGLISH, in the rendering the holy book's `translation` names — never the original language, so every scripture can be searched together."
+    original: "The verse verbatim in the language its tradition holds to be the scripture itself (Hebrew, Arabic). Empty where it was received in English or none is stored."
     translation: "Which English rendering `text` is, e.g. `King James Version`, `Pickthall`."
 
 - name: ReadingPortion
   userAnchor: false
   description: >-
-    A portion of a scripture read as a unit on a cycle — a juz of the Quran (thirty, one a night in
-    Ramadan), a parashah of the Torah (fifty-four, one a week). It cuts across chapters, so it is not
-    a level: each verse in it points at it with IN_PORTION.
+    A portion of a scripture read as a unit on a cycle, identified by `number` within its
+    `scripture` — a juz of the Quran (thirty, often one a night through Ramadan), a parashah of the
+    Torah (fifty-four, read on the Sabbath through the year, some weeks two together). It cuts
+    across chapters, so it is not a level: each verse in it points at it with IN_PORTION.
+  examples:
+    - q: "which verses are in the first juz"
+      cypher: |
+        MATCH (v:Verse)-[:IN_PORTION]->(p:ReadingPortion {scripture: 'quran', number: 1})
+        RETURN v.name AS reference, v.text AS text
+        ORDER BY v.ordinal
   properties:
     scripture: "The holy book's slug, e.g. `quran`."
     name: "The portion's name, e.g. `Juz 1`, `Bereshit`."
@@ -152,4 +190,4 @@
       type: int
       description: "Position in the cycle, from 1."
     cycle: "What the cycle is, e.g. `thirty parts, one a night of Ramadan`."
-    startsAt: "The reference of the portion's first verse, e.g. `Quran 2:142`."
+    startsAt: "Not a date: the `name` of the portion's first verse, e.g. `Quran 2:142`, `Tanakh Genesis 6:9`."

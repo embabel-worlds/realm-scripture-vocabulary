@@ -3,7 +3,10 @@
 # designed result, not a defect.
 
 - name: Scriptures
-  description: Every scripture installed, with its tradition, its English rendering and how many verses it holds.
+  description: >-
+    Every installed scripture, its tradition, English rendering and verse count. One row per holy
+    book; a scripture whose realm is not installed is not listed, and a canon split across two realms
+    (the Doctrine and Covenants, the Pearl of Great Price) is two rows.
   cypher: |
     MATCH (h:HolyBook)
     RETURN h.scripture AS scripture, h.name AS name, h.tradition AS tradition,
@@ -12,12 +15,17 @@
     ORDER BY scripture
 
 - name: SearchScriptures
-  description: Verses in EVERY installed scripture whose English text contains a word or phrase, case-insensitively — so `mercy` finds it in the Bible and the Quran alike. Matches inside words. Grouped by scripture, then in each scripture's own order.
+  description: >-
+    Verses in every installed scripture whose English contains a word or phrase. Partial and
+    case-insensitive, so `mercy` finds it in the Bible and the Quran alike, and it matches inside
+    words. Searches only the English `text`, never the Hebrew or Arabic original. Returns at most
+    `perScripture` verses from each scripture, in its own order, with the full count of matches
+    beside them. For passages about a theme that never use the word, use MeaningAcrossScriptures.
   params:
     term:
       type: string
       default: "mercy"
-      description: "The word or phrase to find, in English."
+      description: "The word or phrase to find, in English. A partial match, ignoring case: any verse whose text contains it, inside longer words too (`fast` matches `steadfast`)."
     perScripture:
       type: int
       default: 10
@@ -33,12 +41,16 @@
     ORDER BY scripture, hit.ordinal
 
 - name: WordAcrossScriptures
-  description: How often a word or phrase appears in each installed scripture's English text — verses containing it, and per thousand verses so a long scripture does not win by length.
+  description: >-
+    How often a word appears in each installed scripture, per thousand verses. Counts VERSES whose
+    English text contains it, not occurrences: a verse that says it twice counts once. Per thousand
+    verses so a long scripture does not win by length; a scripture without the word shows 0. English
+    `text` only, never the original language.
   params:
     term:
       type: string
       default: "mercy"
-      description: "The word or phrase to count, in English."
+      description: "The word or phrase to count, in English. A partial match, ignoring case: a verse counts when its text contains it, inside longer words too."
   cypher: |
     MATCH (v:Verse)
     WITH v.scripture AS scripture, count(v) AS verses,
@@ -69,7 +81,13 @@
 # return what of one scripture happened to be in everyone's top eight.
 
 - name: MeaningAcrossScriptures
-  description: The chapters in EVERY installed scripture whose meaning is closest to a question or theme — semantic and lexical retrieval fused into one ranking over the Bible, the Quran, the Tanakh, the Book of Mormon and the rest alike — each with its best-matching passage and its opening verses.
+  description: >-
+    Chapters in every installed scripture nearest in meaning to a question or theme. Semantic and
+    lexical retrieval fused into one ranking over the Bible, the Quran, the Tanakh, the Book of
+    Mormon and the rest alike; each chapter comes with its best-matching passage and its opening
+    verses. Returns only the nearest few chapters of all scriptures together (eight by default), so
+    one scripture can fill them; pass `scripture` to search only one. A scripture that does not
+    publish its chapters as documents tagged `scripture` takes no part.
   params:
     query:
       type: string
@@ -93,7 +111,12 @@
     ORDER BY rank
 
 - name: AskScriptures
-  description: What EVERY installed scripture says on a question, by the agentic retrieval loop — it reformulates, searches the Bible's, the Quran's, the Tanakh's and the Book of Mormon's chapters together, reads further where a passage is inconclusive, and returns only chapters it judges bear on the question, with the evidence it read. Slower than MeaningAcrossScriptures; several model calls per question.
+  description: >-
+    What every installed scripture says on a question, by agentic retrieval. It reformulates,
+    searches the Bible's, the Quran's, the Tanakh's and the Book of Mormon's chapters together, reads
+    further where a passage is inconclusive, and returns only chapters it judges bear on the
+    question, at most `limit`, with the evidence it read. Chapters, not single verses. Slower than
+    MeaningAcrossScriptures: several model calls per question.
   params:
     question:
       type: string
@@ -126,7 +149,13 @@
 # bounded number of model calls instead of a fold over thousands of verses.
 
 - name: SummarizeAcrossScriptures
-  description: What each installed scripture says about a topic, summarised by a model from every verse that uses a word, with the references it drew on. A scripture with no such verse is absent — it says nothing in those words. One model summary per scripture; tens of seconds.
+  description: >-
+    Each scripture's teaching on a topic, summarised from verses that use a word. A model reads
+    one scripture's matching verses at a time, at most `maxVerses` in its own order, and cites the
+    references it drew on. Only the English spelling is matched (partial, ignoring case); a scripture
+    with no such verse is absent, because it says nothing in those words. For teaching expressed
+    without the word, use SummarizeMeaningAcrossScriptures. One model summary per scripture; tens of
+    seconds.
   params:
     term:
       type: string
@@ -151,7 +180,12 @@
     ORDER BY matching DESC
 
 - name: SummarizeMeaningAcrossScriptures
-  description: What one installed scripture says about a theme, summarised by a model from the chapters whose meaning is nearest it — so passages that never use the word are found too. Says so when the nearest chapters do not address the theme. Run once per scripture; tens of seconds.
+  description: >-
+    One scripture's teaching on a theme, from its chapters nearest in meaning. Passages that
+    never use the word are found too. Reads only the nearest few chapters the search returns (eight by
+    default), not the whole scripture, and says so when they do not address the theme. Run once per
+    scripture; with the default `scripture`, it summarises each scripture that has a chapter among
+    the nearest of all of them together. Tens of seconds.
   params:
     query:
       type: string
@@ -172,12 +206,16 @@
 # READING — any chapter of any scripture, by its name, with each verse's counterparts elsewhere.
 
 - name: ReadScriptureChapter
-  description: A whole chapter of any installed scripture, verse by verse, with the original-language text where the scripture carries it and each verse's counterparts in other scriptures through CORRESPONDS_TO.
+  description: >-
+    A whole chapter of any installed scripture, verse by verse, with counterparts. One chapter only,
+    named exactly. Gives the original-language text where the scripture carries it, and each verse's
+    counterparts in other scriptures through CORRESPONDS_TO, which are empty unless realm-bible and a
+    realm that pairs its own verses with the King James are both installed.
   params:
     chapter:
       type: string
       default: "Genesis 17"
-      description: "The chapter's `name` as the other views return it, e.g. `Genesis 17`, `Surah 19` …"
+      description: "The chapter's `name`, exactly as the scriptures write it: `Genesis 17` (Bible), `Tanakh Genesis 17`, `Maryam` (Quran, surah 19), `1 Nephi 3`, `D&C 76`, `Moses 1`."
   cypher: |
     MATCH (ch:ScriptureChapter {name: $chapter})<-[:IN]-(v:Verse)
     OPTIONAL MATCH (v)-[:CORRESPONDS_TO]-(o:Verse)
@@ -191,12 +229,16 @@
 # quotes the King James), so this view answers only with realm-bible and one of those installed.
 
 - name: SamePassage
-  description: A verse in any installed scripture and its counterparts in the others, through CORRESPONDS_TO — the Tanakh's Hebrew-numbered verse beside the King James's, a Book of Mormon verse beside the Isaiah it quotes. Either direction.
+  description: >-
+    A verse in any installed scripture and its counterparts in the others. Through CORRESPONDS_TO,
+    either direction: the Tanakh's Hebrew-numbered verse beside the King James's, a Book of Mormon
+    verse beside the Isaiah it quotes. Only pairings a realm stores and checks, not every thematic
+    parallel, and none unless realm-bible and a realm that pairs with it are installed.
   params:
     reference:
       type: string
       default: "Isaiah 2:2"
-      description: "A verse's `name`, e.g. `Isaiah 2:2`, `Tanakh Exodus 21:37`, `2 Nephi 12:2`."
+      description: "A verse's `name`, exactly, e.g. `Isaiah 2:2`, `Tanakh Exodus 21:37`, `2 Nephi 12:2`, `D&C 1:1`."
   cypher: |
     MATCH (v:Verse {name: $reference})-[r:CORRESPONDS_TO]-(o:Verse)
     RETURN v.scripture AS scripture, v.name AS reference, v.text AS text,
