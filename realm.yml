@@ -4,7 +4,7 @@ description: >-
   across them all. Parent types only, with no producers and no data of its own. A realm over one scripture (the Bible, the Quran, the Tanakh, the
   Book of Mormon) declares its own types as children of these, so a question asked about
   Verse is answered by every scripture installed, and `MATCH (v:Quran:Verse)` still asks one.
-version: 0.3.1
+version: 0.3.2
 # Not ready to be offered: four scriptures are children, but the contract is new, and the
 # meaning-search views depend on every child stamping `documentUri` and tagging its documents.
 maturity: experimental
